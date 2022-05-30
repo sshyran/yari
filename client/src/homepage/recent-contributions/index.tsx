@@ -1,4 +1,3 @@
-import React from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import useSWR from "swr";
@@ -29,13 +28,6 @@ function RecentContributions(props: HydrationData<any>) {
     }
   );
 
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    if (!mounted) {
-      setMounted(true);
-    }
-  }, [mounted]);
-
   return hyData?.recentContributions ? (
     <section className="recent-contributions">
       <h2>Recent contributions</h2>
@@ -54,8 +46,8 @@ function RecentContributions(props: HydrationData<any>) {
                   </a>
                 </span>
               </p>
-              <span className="request-date">
-                {mounted && dayjs(updated_at).fromNow()}
+              <span className="request-date" suppressHydrationWarning>
+                {dayjs(updated_at).fromNow()}
               </span>
             </li>
           )
