@@ -4,7 +4,7 @@ import path from "node:path";
 import fromMarkdown from "mdast-util-from-markdown";
 import visit from "unist-util-visit";
 
-import { Document, Redirect, Image } from "../../content";
+import { Document, Redirect, FileAttachment } from "../../content";
 import { findMatchesInText } from "../matches-in-text";
 import {
   DEFAULT_LOCALE,
@@ -271,7 +271,7 @@ export function getBrokenLinksFlaws(doc, $, { rawContent }, level) {
       const found = Document.findByURL(hrefNormalized);
       if (!found) {
         // Before we give up, check if it's an image.
-        if (!Image.findByURLWithFallback(hrefNormalized)) {
+        if (!FileAttachment.findByURLWithFallback(hrefNormalized)) {
           // Even if it's a redirect, it's still a flaw, but it'll be nice to
           // know what it *should* be.
           const resolved = Redirect.resolve(hrefNormalized);

@@ -6,7 +6,7 @@ import path from "node:path";
 
 import sizeOf from "image-size";
 
-import { Document, Image } from "../content";
+import { Document, FileAttachment } from "../content";
 import { FLAW_LEVELS } from "../libs/constants";
 import { findMatchesInText } from "./matches-in-text";
 import { DEFAULT_LOCALE } from "../libs/constants";
@@ -133,12 +133,12 @@ export function checkImageReferences(doc, $, options, { url, rawContent }) {
       // but all our images are going to be static.
       finalSrc = absoluteURL.pathname;
       // We can use the `finalSrc` to look up and find the image independent
-      // of the correct case because `Image.findByURL` operates case
+      // of the correct case because `FileAttachment.findByURL` operates case
       // insensitively.
 
-      // What follows uses the same algorithm as Image.findByURLWithFallback
+      // What follows uses the same algorithm as FileAttachment.findByURLWithFallback
       // but only adds a filePath if it exists for the DEFAULT_LOCALE
-      const filePath = Image.findByURL(finalSrc);
+      const filePath = FileAttachment.findByURL(finalSrc);
       let enUSFallback = false;
       if (
         !filePath &&
@@ -149,7 +149,7 @@ export function checkImageReferences(doc, $, options, { url, rawContent }) {
           new RegExp(`^/${doc.locale}/`, "i"),
           `/${DEFAULT_LOCALE}/`
         );
-        if (Image.findByURL(enUSFinalSrc)) {
+        if (FileAttachment.findByURL(enUSFinalSrc)) {
           // Use the en-US src instead
           finalSrc = enUSFinalSrc;
           // Note that this `<img src="...">` value can work if you use the
@@ -350,7 +350,7 @@ export function checkImageWidths(doc, $, options, { rawContent }) {
           );
         }
       } else if (!imgSrc.includes("://") && imgSrc.startsWith("/")) {
-        const filePath = Image.findByURLWithFallback(imgSrc);
+        const filePath = FileAttachment.findByURLWithFallback(imgSrc);
         if (filePath) {
           const dimensions = sizeOf(filePath);
           img.attr("width", `${dimensions.width}`);
