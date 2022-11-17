@@ -18,19 +18,19 @@ function isFileAttachment(filePath: string) {
   );
 }
 
-function isAudio(filePath) {
+function isAudio(filePath: string) {
   return /\.(mp3|ogg)$/i.test(filePath);
 }
 
-function isFont(filePath) {
+function isFont(filePath: string) {
   return /\.(ttf)$/i.test(filePath);
 }
 
-function isVideo(filePath) {
+function isVideo(filePath: string) {
   return /\.(mp4|webm)$/i.test(filePath);
 }
 
-function isImage(filePath) {
+function isImage(filePath: string) {
   if (fs.statSync(filePath).isDirectory()) {
     return false;
   }
@@ -52,7 +52,7 @@ function isImage(filePath) {
   return true;
 }
 
-function urlToFilePath(url) {
+function urlToFilePath(url: string) {
   const [, locale, , ...slugParts] = decodeURI(url).split("/");
   return path.join(locale.toLowerCase(), slugToFolder(slugParts.join("/")));
 }
@@ -63,7 +63,7 @@ const find = memoize((relativePath: string) => {
   );
 });
 
-export function findByURL(url) {
+export function findByURL(url: string) {
   return find(urlToFilePath(url));
 }
 
