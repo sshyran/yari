@@ -207,9 +207,19 @@ const MARKDOWN_FILENAME = "index.md";
 // ---------
 
 const VALID_MIME_TYPES = new Set([
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/webm",
+  "font/woff",
+  "font/woff2",
   "image/png",
   "image/jpeg", // this is what you get for .jpeg *and* .jpg file extensions
   "image/gif",
+  "image/webp",
+  "video/mp4",
+  "video/ogg",
+  "video/webm",
 ]);
 
 const MAX_COMPRESSION_DIFFERENCE_PERCENTAGE = 25; // percent
