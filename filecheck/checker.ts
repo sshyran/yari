@@ -149,6 +149,10 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
     throw new Error(`${filePath} is not mentioned in ${htmlFilePath}`);
   }
 
+  await checkCompression(filePath, options);
+}
+
+async function checkCompression(filePath, options) {
   const tempdir = tempy.directory();
   const extension = path.extname(filePath).toLowerCase();
   try {
