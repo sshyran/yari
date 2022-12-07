@@ -260,7 +260,7 @@ function makeTOC(doc) {
  *
  * @param {Document} document
  */
-function getAdjacentFileAttachments(documentDirectory) {
+function getAdjacentFileAttachments(documentDirectory: string) {
   const dirents = fs.readdirSync(documentDirectory, { withFileTypes: true });
   return dirents
     .filter((dirent) => {

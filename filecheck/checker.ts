@@ -152,7 +152,7 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
   await checkCompression(filePath, options);
 }
 
-async function checkCompression(filePath, options) {
+async function checkCompression(filePath: string, options: CheckerOptions) {
   const tempdir = tempy.directory();
   const extension = path.extname(filePath).toLowerCase();
   try {
