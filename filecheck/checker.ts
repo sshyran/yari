@@ -58,7 +58,7 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
   }
 
   // Ensure that binary files contain what their extension indicates.
-  if (/\.(mp3|mp4|webm|woff2?)$/i.test(filePath)) {
+  if (/\.(mp3|mp4|ogg|webm|woff2?)$/i.test(filePath)) {
     const ext = filePath.split(".").pop();
     const type = await FileType.fromFile(filePath);
     if (!type) {
