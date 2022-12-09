@@ -1,7 +1,10 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import os from "node:os";
 
+import { eachLimit } from "async";
+import cliProgress from "cli-progress";
+import { fdir, PathsOutput } from "fdir";
 import fse from "fs-extra";
 import tempy from "tempy";
 import * as cheerio from "cheerio";
@@ -19,7 +22,7 @@ import {
   MAX_COMPRESSION_DIFFERENCE_PERCENTAGE,
 } from "../libs/constants";
 
-function formatSize(bytes) {
+function formatSize(bytes: number): string {
   if (bytes > 1024 * 1024) {
     return `${(bytes / 1024.0 / 1024.0).toFixed(1)}MB`;
   }
@@ -33,28 +36,44 @@ interface CheckerOptions {
   saveCompression?: boolean;
 }
 
-export async function checkFile(filePath, options: CheckerOptions = {}) {
+class FixableError extends Error {
+  fixCommand: string;
+
+  constructor(message: string, fixCommand: string) {
+    super(message);
+    this.fixCommand = fixCommand;
+  }
+
+  toString() {
+    return `${this.constructor.name}: ${this.message}`;
+  }
+}
+
+function getRelativePath(filePath: string): string {
+  return path.relative(process.cwd(), filePath);
+}
+
+export async function checkFile(
+  filePath: string,
+  options: CheckerOptions = {}
+) {
   // Check that the filename is always lowercase.
-  if (path.basename(filePath) !== path.basename(filePath).toLowerCase()) {
+  const expectedPath = path.join(
+    path.dirname(filePath),
+    path.basename(filePath).toLowerCase()
+  );
+  if (filePath !== expectedPath) {
     throw new Error(
-      `Base name must be lowercase (not ${path.basename(filePath)})`
+      `Base name must be lowercase (not ${path.basename(
+        filePath
+      )}). Please rename the file and update its usages.`
     );
   }
 
   // Check that the file size is >0 and <MAX_FILE_SIZE.
-  const stat = await promisify(fs.stat)(filePath);
+  const stat = await fs.stat(filePath);
   if (!stat.size) {
     throw new Error(`${filePath} is 0 bytes`);
-  }
-  if (stat.size > MAX_FILE_SIZE) {
-    const formatted =
-      stat.size > 1024 * 1024
-        ? `${(stat.size / 1024.0 / 1024).toFixed(1)}MB`
-        : `${(stat.size / 1024.0).toFixed(1)}KB`;
-    const formattedMax = `${(MAX_FILE_SIZE / 1024.0 / 1024).toFixed(1)}MB`;
-    throw new Error(
-      `${filePath} is too large (${formatted} > ${formattedMax})`
-    );
   }
 
   // Ensure that binary files contain what their extension indicates.
@@ -75,7 +94,7 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
   // So use special case for files called '*.svg'
   if (path.extname(filePath) === ".svg") {
     // SVGs must not contain any script tags
-    const content = fs.readFileSync(filePath, "utf-8");
+    const content = await fs.readFile(filePath, "utf-8");
     if (!isSvg(content)) {
       throw new Error(`${filePath} does not appear to be an SVG`);
     }
@@ -104,22 +123,30 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
       // This can easily happen if the .png (for example) file is actually just
       // a text file and not a binary.
       throw new Error(
-        `${filePath} file-type could not be extracted at all ` +
+        `${getRelativePath(
+          filePath
+        )} file-type could not be extracted at all ` +
           `(probably not a ${path.extname(filePath)} file)`
       );
     }
     if (!VALID_MIME_TYPES.has(fileType.mime)) {
       throw new Error(
-        `${filePath} has an unrecognized mime type: ${fileType.mime}`
+        `${getRelativePath(filePath)} has an unrecognized mime type: ${
+          fileType.mime
+        }`
       );
     } else if (
       path.extname(filePath).replace(".jpeg", ".jpg").slice(1) !== fileType.ext
     ) {
       // If the file is a 'image/png' but called '.jpe?g', that's wrong.
       throw new Error(
-        `${filePath} is type '${
+        `${getRelativePath(filePath)} of type '${
           fileType.mime
-        }' but named extension is '${path.extname(filePath)}'`
+        }' should have extension '${
+          fileType.ext
+        }', but has extension '${path.extname(
+          filePath
+        )}'. Please rename the file and update its usages.`
       );
     }
   }
@@ -128,14 +155,17 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
   const parentPath = path.dirname(filePath);
   const htmlFilePath = path.join(parentPath, "index.html");
   const mdFilePath = path.join(parentPath, "index.md");
-  const rawContent = fs.existsSync(htmlFilePath)
-    ? fs.readFileSync(htmlFilePath, "utf-8")
-    : fs.existsSync(mdFilePath)
-    ? fs.readFileSync(mdFilePath, "utf-8")
+  const docFilePath = (await fse.exists(htmlFilePath))
+    ? htmlFilePath
+    : (await fse.exists(mdFilePath))
+    ? mdFilePath
     : null;
-  if (!rawContent) {
-    throw new Error(
-      `${filePath} is not located in a folder with a document file.`
+  if (!docFilePath) {
+    throw new FixableError(
+      `${getRelativePath(
+        filePath
+      )} can be removed, because it is not located in a folder with a document file.`,
+      `rm -i '${getRelativePath(filePath)}'`
     );
   }
 
@@ -145,8 +175,18 @@ export async function checkFile(filePath, options: CheckerOptions = {}) {
   // name at least once.
   // Yes, this is pretty easy to fake if you really wanted to, but why
   // bother?
+  const rawContent = docFilePath
+    ? await fs.readFile(docFilePath, "utf-8")
+    : null;
   if (!rawContent.includes(path.basename(filePath))) {
-    throw new Error(`${filePath} is not mentioned in ${htmlFilePath}`);
+    throw new FixableError(
+      `${getRelativePath(
+        filePath
+      )} can be removed, because it is not mentioned in ${getRelativePath(
+        docFilePath
+      )}`,
+      `rm -i '${getRelativePath(filePath)}'`
+    );
   }
 
   await checkCompression(filePath, options);
@@ -185,9 +225,33 @@ async function checkCompression(filePath: string, options: CheckerOptions) {
       throw new Error(`${filePath} could not be compressed`);
     }
     const compressed = files[0];
-    const sizeBefore = fs.statSync(filePath).size;
-    const sizeAfter = fs.statSync(compressed.destinationPath).size;
+    const [sizeBefore, sizeAfter] = (
+      await Promise.all([
+        fs.stat(filePath),
+        fs.stat(compressed.destinationPath),
+      ])
+    ).map((stat) => stat.size);
     const reductionPercentage = 100 - (100 * sizeAfter) / sizeBefore;
+
+    const formattedBefore = formatSize(sizeBefore);
+    const formattedMax = formatSize(MAX_FILE_SIZE);
+    const formattedAfter = formatSize(sizeAfter);
+
+    // this check should only be done if we want to save the compressed file
+    if (sizeAfter > MAX_FILE_SIZE) {
+      throw new Error(
+        `${getRelativePath(
+          filePath
+        )} is too large (${formattedBefore} > ${formattedMax}), even after compressing to ${formattedAfter}.`
+      );
+    } else if (!options.saveCompression && stat.size > MAX_FILE_SIZE) {
+      throw new FixableError(
+        `${getRelativePath(
+          filePath
+        )} is too large (${formattedBefore} > ${formattedMax}), but can be compressed to ${formattedAfter}.`,
+        `yarn filecheck '${getRelativePath(filePath)}' --save-compression`
+      );
+    }
 
     if (reductionPercentage > MAX_COMPRESSION_DIFFERENCE_PERCENTAGE) {
       if (options.saveCompression) {
@@ -198,34 +262,83 @@ async function checkCompression(filePath: string, options: CheckerOptions) {
         );
         fse.copyFileSync(compressed.destinationPath, filePath);
       } else {
-        const msg = `${filePath} is ${formatSize(
-          sizeBefore
-        )} can be compressed to ${formatSize(
-          sizeAfter
-        )} (${reductionPercentage.toFixed(0)}%)`;
-        console.warn(msg);
-        console.log(
-          "Consider running again with '--save-compression' and run again " +
-            "to automatically save the newly compressed file."
-        );
-        const relPath =
-          process.env.CI === "true"
-            ? path.relative(process.cwd(), filePath)
-            : filePath;
-        const cliCommand = `yarn filecheck "${relPath}" --save-compression`;
-        console.log(`HINT! Type the following command:\n\n\t${cliCommand}\n`);
-        throw new Error(
-          `${filePath} can be compressed by ~${reductionPercentage.toFixed(0)}%`
+        throw new FixableError(
+          `${filePath} is ${formatSize(
+            sizeBefore
+          )} and can be compressed to ${formatSize(
+            sizeAfter
+          )} (${reductionPercentage.toFixed(0)}%)`,
+          `yarn filecheck '${getRelativePath(filePath)}' --save-compression`
         );
       }
     }
-  } catch (error) {
+  } finally {
     fse.removeSync(tempdir);
-    console.error(error);
-    throw error;
   }
 }
 
-export async function runChecker(files, options: CheckerOptions) {
-  return Promise.all(files.map((f) => checkFile(f, options)));
+function canCheckFile(filePath: string) {
+  return (
+    /\/files\//.test(filePath) &&
+    !/\/node_modules\//.test(filePath) &&
+    !/\.(DS_Store|html|json|md|txt|yml)$/i.test(filePath)
+  );
+}
+
+async function resolveDirectory(file: string): Promise<string[]> {
+  const stats = await fs.lstat(file);
+  if (stats.isDirectory()) {
+    const api = new fdir()
+      .withErrors()
+      .withFullPaths()
+      .filter((filePath) => canCheckFile(filePath))
+      .crawl(file);
+    return api.withPromise() as Promise<PathsOutput>;
+  } else if (stats.isFile() && canCheckFile(file)) {
+    return [file];
+  } else {
+    return [];
+  }
+}
+
+export async function runChecker(
+  filesAndDirectories: string[],
+  options: CheckerOptions
+) {
+  const errors = [];
+
+  const files = (
+    await Promise.all(filesAndDirectories.map(resolveDirectory))
+  ).flat();
+
+  const progressBar = new cliProgress.SingleBar({ etaBuffer: 100 });
+  progressBar.start(files.length, 0);
+
+  await eachLimit(files, os.cpus().length, async (file) => {
+    try {
+      await checkFile(file, options);
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      progressBar.increment();
+    }
+  });
+
+  progressBar.stop();
+
+  if (errors.length) {
+    let msg = errors.map((error) => `${error}`).join("\n");
+    const fixableErrors = errors.filter(
+      (error) => error instanceof FixableError
+    );
+    if (fixableErrors.length) {
+      const cmds = fixableErrors
+        .map((error) => error.fixCommand)
+        .sort()
+        .join("\n");
+      msg += `\n\n${fixableErrors.length} of ${errors.length} errors can be fixed:\n\n${cmds}`;
+    }
+
+    throw new Error(msg);
+  }
 }

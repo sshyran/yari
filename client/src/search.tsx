@@ -11,6 +11,7 @@ import { useLocale } from "./hooks";
 import { SearchProps, useFocusViaKeyboard } from "./search-utils";
 import { useUserData } from "./user-context";
 import { getCollectionItems } from "./plus/collections-quicksearch";
+import { useGleanClick } from "./telemetry/glean-context";
 
 const PRELOAD_WAIT_MS = 500;
 const SHOW_INDEXING_AFTER_MS = 500;
@@ -32,6 +33,10 @@ type ResultItem = {
   positions: Set<number>;
   collection: boolean;
 };
+
+function quicksearchPing(input) {
+  return `quick-search: ${input}`;
+}
 
 function useSearchIndex(): readonly [
   null | SearchIndex,
@@ -197,6 +202,7 @@ function InnerSearchNavigateWidget(props: InnerSearchNavigateWidgetProps) {
   const formId = `${id}-form`;
   const navigate = useNavigate();
   const locale = useLocale();
+  const gleanClick = useGleanClick();
 
   const [searchIndex, searchIndexError, initializeSearchIndex] =
     useSearchIndex();
@@ -283,6 +289,7 @@ function InnerSearchNavigateWidget(props: InnerSearchNavigateWidgetProps) {
     defaultHighlightedIndex: 0,
     onSelectedItemChange: ({ type, selectedItem }) => {
       if (type !== useCombobox.stateChangeTypes.InputBlur && selectedItem) {
+        gleanClick(quicksearchPing(inputValue));
         navigate(selectedItem.url);
         onChangeInputValue("");
         reset();
@@ -407,6 +414,7 @@ function InnerSearchNavigateWidget(props: InnerSearchNavigateWidgetProps) {
                   onClick={(event: React.MouseEvent) => {
                     if (event.ctrlKey || event.metaKey) {
                       // Open in new tab, don't navigate current tab.
+                      gleanClick(quicksearchPing(inputValue));
                       event.stopPropagation();
                     } else {
                       // Open in same tab, navigate via combobox.

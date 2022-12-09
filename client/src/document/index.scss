@@ -419,12 +419,12 @@ pre,
 code,
 .code-example {
   border-radius: var(--elem-radius);
-  font-size: var(--type-base-font-size-rem);
+  font-family: var(--font-code);
+  font-size: var(--type-smaller-font-size);
 }
 
 code {
   background: var(--code-background-inline);
-  font-family: var(--font-code);
   padding: 0.125rem 0.25rem;
   width: fit-content;
 }
@@ -586,6 +586,7 @@ a.page-not-created {
 
   &:link,
   &:hover,
+  &:visited,
   &:not([href]),
   &:focus {
     color: var(--icon-critical);
