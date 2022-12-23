@@ -22,8 +22,10 @@ type Item = {
   collection: boolean;
 };
 
+type FlexItem = [index: number, title: string, slugTail: string];
+
 type SearchIndex = {
-  flex: [index: number, title: string, slugTail: string][];
+  flex: FlexItem[];
   items: null | Item[];
 };
 
@@ -91,11 +93,11 @@ function useSearchIndex(): readonly [
 
       const flex = mixed.map(
         ({ title, url }, i) =>
-          [i, title.toLowerCase(), url.split("/").pop().toLowerCase()] as [
-            number,
-            string,
-            string
-          ]
+          [
+            i,
+            title.toLowerCase(),
+            url.split("/").pop().toLowerCase(),
+          ] as FlexItem
       );
 
       setSearchIndex({
