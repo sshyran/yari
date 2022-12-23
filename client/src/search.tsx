@@ -23,7 +23,8 @@ type Item = {
 };
 
 type SearchIndex = {
-  flex: any;
+  // [index, title, slugTail][]
+  flex: [number, string, string][];
   items: null | Item[];
 };
 
@@ -89,7 +90,14 @@ function useSearchIndex(): readonly [
           }),
       ];
 
-      const flex = mixed.map(({ title }, i) => [i, title.toLowerCase()]);
+      const flex = mixed.map(
+        ({ title, url }, i) =>
+          [i, title.toLowerCase(), url.split("/").pop().toLowerCase()] as [
+            number,
+            string,
+            string
+          ]
+      );
 
       setSearchIndex({
         flex,
@@ -240,10 +248,19 @@ function InnerSearchNavigateWidget(props: InnerSearchNavigateWidgetProps) {
       .toLowerCase()
       .split(" ")
       .map((s) => s.trim());
-    const indexResults: number[] = searchIndex.flex
-      .filter(([_, title]) => q.every((q) => title.includes(q)))
-      .map(([i]) => i)
+    const indexResults = searchIndex.flex
+      .reduce((results, item) => {
+        const [index, title, slugTail] = item;
+        if (q.every((q) => title.includes(q))) {
+          const exact = Number(q.length === 1 && q[0] === slugTail);
+          results.push([exact, index]);
+        }
+        return results;
+      }, [] as Array<[number, number]>)
+      .sort(([aExact], [bExact]) => bExact - aExact) // Boost exact matches.
+      .map(([_, i]) => i)
       .slice(0, limit);
+
     return indexResults.map(
       (index: number) => (searchIndex.items || [])[index] as ResultItem
     );
